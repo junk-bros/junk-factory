@@ -5,11 +5,9 @@ import json
 import boto3
 from django.http import FileResponse
 import string
+import threading
 
 # Create your views here.
-
-
-filename = '/Users/xyj/Desktop/kaggle_dataset/Titanic_dataset/test.csv'
 
 
 # 文件操作
@@ -27,6 +25,19 @@ class FileOperate:
 
     def index(self, request):
         return render(request, 'downloadtest.html')
+
+    # 下载操作多线程封装请求函数
+    def _response(self, client, key, versionId=None):
+        response = client.get_object(
+            Bucket=self.bucket,
+            Key=key,
+            # VersionId=versionId
+        )
+        file_obj = response['Body']
+        res = FileResponse(file_obj)
+        res['Content-Type'] = 'application/octet-stream'
+        res['Content-Disposition'] = 'attachment;filename="test1.csv"'
+        return res
 
     # 获取文件信息函数
     def _getFiles(self, userId):
@@ -51,7 +62,7 @@ class FileOperate:
                 for version in versions:
                     obj = version.get()
                     children_dic = {
-                        'key': obj.get('VersionId'),
+                        'key': name + '/' + obj.get('VersionId'),
                         'filename': '历史版本',
                         'size': str(
                             round(obj.get('ContentLength') / 1024)
@@ -142,28 +153,62 @@ class FileOperate:
             return HttpResponse(dic)
 
     # 下载
-    @csrf_exempt
+    """@csrf_exempt
     def download(self, request):
+        req = json.loads(request.body)
+        userId = req['userId']
+        files = req['files']
         client = self.session.client('s3')
-        response = client.get_object(
-            Bucket=self.bucket, Key='test.csv'
-        )
-        file_obj = response['Body']
-        res = FileResponse(file_obj)
-        res['Content-Type'] = 'application/octet-stream'
-        res['Content-Disposition'] = 'attachment;filename="test.csv"'
-        return res
+        try:
+            threads = []
+            for _file in files:
+                key = userId + '/' + _file['filename']
+                versionId = _file['versionId']
+                t = threading.Thread(
+                    target=self._response,
+                    args=(client, key, versionId)
+                )
+                threads.append(t)
+            for t in threads:
+                t.start()
+            t.join()
+            dic = {'status': 1}
+            dic = json.dumps(dic, ensure_ascii=False)
+            return HttpResponse(dic)
+        except Exception as e:
+            dic = {'status': 0, 'message': str(e)}
+            dic = json.dumps(dic, ensure_ascii=False)
+            return HttpResponse(dic)"""
+
+    def download(self, request):
+        key = '5c3475c8e4f98437c5669366/test1.csv'
+        versionId = 'jAAvqHyfxuIHCZ_bGK1g3LRcaIYOWMbX'
+        client = self.session.client('s3')
+        self._response(client, key)
+        return HttpResponse('success')
 
     # 删除
+    @csrf_exempt
     def delete(self, request):
+        req = json.loads(request.body)
+        userId = req['userId']
+        files = req['files']
+        objects = []
+        for _file in files:
+            _object = {
+                'Key': userId + '/' + _file['filename'],
+                'VersionId': _file['versionId']
+            }
+            objects.append(_object)
         client = self.session.client('s3')
-        response = client.delete_object(
-            Bucket=self.bucket,
-            Key='5c331a404bb2871ec590d0d0/test1.csv',
-            VersionId='zjwx3crL55RX8KZH94P7pqYesenjFP_T'
-        )
-        dic = {
-            'delete': 'success'
-        }
-        dic = json.dumps(dic, ensure_ascii=False)
-        return HttpResponse(dic)
+        try:
+            client.delete_objects(
+                Bucket=self.bucket, Delete={'Objects': objects}
+            )
+            dic = {'status': 1, 'data': self._getFiles(userId)}
+            dic = json.dumps(dic, ensure_ascii=False)
+            return HttpResponse(dic)
+        except Exception as e:
+            dic = {'status': 0, 'message': str(e)}
+            dic = json.dumps(dic, ensure_ascii=False)
+            return HttpResponse(dic)
