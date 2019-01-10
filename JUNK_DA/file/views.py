@@ -5,7 +5,6 @@ import json
 import boto3
 from django.http import FileResponse
 import string
-import threading
 
 # Create your views here.
 
@@ -13,31 +12,15 @@ import threading
 # 文件操作
 class FileOperate:
     def __init__(self):
-        self.aws_key = 'AKIAJGLY2Z3S2OFVXXGA'
-        self.aws_secret = 'tMf77ga1M+SrRwJOahRm3iqc/hrFdIthCXaNf99b'
-        self.region = 'ap-northeast-1'
-        self.bucket = 'junk-bins'
+        self.aws_key = 'id'
+        self.aws_secret = 'secret'
+        self.region = 'region'
+        self.bucket = 'bucket_name'
         self.session = boto3.Session(
             aws_access_key_id=self.aws_key,
             aws_secret_access_key=self.aws_secret,
             region_name=self.region
         )
-
-    def index(self, request):
-        return render(request, 'downloadtest.html')
-
-    # 下载操作多线程封装请求函数
-    def _response(self, client, key, versionId=None):
-        response = client.get_object(
-            Bucket=self.bucket,
-            Key=key,
-            # VersionId=versionId
-        )
-        file_obj = response['Body']
-        res = FileResponse(file_obj)
-        res['Content-Type'] = 'application/octet-stream'
-        res['Content-Disposition'] = 'attachment;filename="test1.csv"'
-        return res
 
     # 获取文件信息函数
     def _getFiles(self, userId):
@@ -153,39 +136,31 @@ class FileOperate:
             return HttpResponse(dic)
 
     # 下载
-    """@csrf_exempt
+    @csrf_exempt
     def download(self, request):
         req = json.loads(request.body)
         userId = req['userId']
-        files = req['files']
+        filename = req['filename'].split('.')[0]
+        suffix = req['filename'].split('.')[1]
+        versionId = req['versionId']
         client = self.session.client('s3')
+        key = userId + '/' + filename + '.' + suffix
         try:
-            threads = []
-            for _file in files:
-                key = userId + '/' + _file['filename']
-                versionId = _file['versionId']
-                t = threading.Thread(
-                    target=self._response,
-                    args=(client, key, versionId)
-                )
-                threads.append(t)
-            for t in threads:
-                t.start()
-            t.join()
-            dic = {'status': 1}
-            dic = json.dumps(dic, ensure_ascii=False)
-            return HttpResponse(dic)
+            response = client.get_object(
+                Bucket=self.bucket,
+                Key=key,
+                VersionId=versionId
+            )
+            file_obj = response['Body']
+            res = FileResponse(file_obj)
+            res['Content-Type'] = 'application/octet-stream'
+            res['Content-Disposition'] = 'attachment; \
+            filename={0}-{1}.{2}'.format(filename, versionId, suffix)
+            return res
         except Exception as e:
             dic = {'status': 0, 'message': str(e)}
             dic = json.dumps(dic, ensure_ascii=False)
-            return HttpResponse(dic)"""
-
-    def download(self, request):
-        key = '5c3475c8e4f98437c5669366/test1.csv'
-        versionId = 'jAAvqHyfxuIHCZ_bGK1g3LRcaIYOWMbX'
-        client = self.session.client('s3')
-        self._response(client, key)
-        return HttpResponse('success')
+            return HttpResponse(dic)
 
     # 删除
     @csrf_exempt
