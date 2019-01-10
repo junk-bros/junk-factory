@@ -5,6 +5,7 @@ import json
 import boto3
 from django.http import FileResponse
 import string
+from datetime import timedelta
 
 # Create your views here.
 
@@ -52,7 +53,7 @@ class FileOperate:
                         ) + 'KB',
                         'versionId': obj.get('VersionId'),
                         'lastModified': str(obj.get(
-                            'LastModified')).split('+')[0],
+                            'LastModified') + timedelta(hours=8)).split('+')[0],
                     }
                     children.append(children_dic)
                 dic = {}
